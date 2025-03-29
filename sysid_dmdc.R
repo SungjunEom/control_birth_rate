@@ -453,4 +453,107 @@ print(p_closed_loop)
 
 
 
+###############################################
+#
+# Optimal Control for Output Tracking via CVXR
+#
+###############################################
+
+# Install and load the CVXR package if not already installed
+if (!require(CVXR)) install.packages("CVXR")
+library(CVXR)
+
+# Define the output matrix (we track the birth rate, i.e., the first state)
+C <- matrix(c(1, 0, 0, 0), nrow = 1)
+
+# Define weight parameters (you can adjust these)
+Q    <- 1      # weight on tracking error (stage cost)
+R    <- 0.01   # weight on control effort (stage cost)
+Q_f  <- 10     # terminal weight on tracking error
+
+# Define the desired target for the birth rate
+r_target <- 1
+
+# Set the simulation (control) horizon (e.g., 24 steps/months)
+T_horizon <- 24
+
+# System dimension (n = 4)
+n <- 4
+
+# x0 is the initial state at time 0 (for instance, the last column of X_whole)
+# (Assume X_whole is defined; here we use its last column as x0)
+x0 <- X_whole[, ncol(X_whole)]
+
+# Define optimization variables:
+# x: state trajectory (n x (T_horizon+1))
+# u: control input trajectory (length T_horizon)
+x <- Variable(n, T_horizon + 1)
+u <- Variable(T_horizon)
+
+# Build the list of constraints:
+constraints <- list()
+# Initial condition:
+constraints <- c(constraints, x[, 1] == x0)
+# Dynamics and input constraints for t = 0,...,T_horizon-1:
+for(t in 1:T_horizon) {
+  constraints <- c(constraints,
+                   x[, t + 1] == A_future %*% x[, t] + B_future * u[t],
+                   u[t] >= 0,
+                   u[t] <= 100)
+}
+
+# Define the cost function
+# Note: x[,1] is x(0), x[,t+1] is x(t) for t=0,...,T_horizon.
+cost <- 0
+# Sum stage costs for t = 0,...,T_horizon-1:
+for(t in 1:T_horizon) {
+  # Tracking error: C*x[,t] - r_target; we use squared error multiplied by Q.
+  cost <- cost + Q * (C %*% x[, t] - r_target)^2 + R * (u[t])^2
+}
+# Terminal cost at t = T_horizon:
+cost <- cost + Q_f * (C %*% x[, T_horizon + 1] - r_target)^2
+
+# Formulate the optimization problem:
+problem <- Problem(Minimize(cost), constraints)
+
+# Solve the problem
+result <- solve(problem)
+cat("Optimal cost:", result$value, "\n")
+
+# Extract the optimal trajectories
+x_opt <- result$getValue(x)
+u_opt <- result$getValue(u)
+
+# Create a future time vector.
+# future_start_date: one month after the last observed date in global_time_index.
+future_start_date <- global_time_index[ncol(X_whole)] %m+% months(1)
+future_dates <- seq.Date(from = future_start_date, by = "month", length.out = T_horizon + 1)
+
+# Build a data frame for plotting the birth rate (first state variable) and the input.
+opt_data <- data.frame(
+  date       = future_dates,
+  birth_rate = as.numeric(x_opt[1, ]),      # first state = birth rate
+  input      = c(NA, as.numeric(u_opt))       # input: no input at time 0
+)
+
+# For visualization, we overlay the birth rate and the input.
+# We use a scaling factor to put the input on a similar scale.
+scale_factor_input <- max(opt_data$birth_rate, na.rm = TRUE) / max(opt_data$input, na.rm = TRUE)
+
+library(ggplot2)
+p_opt <- ggplot(opt_data, aes(x = date)) +
+  geom_line(aes(y = birth_rate, color = "Birth Rate"), size = 1) +
+  geom_line(aes(y = input * scale_factor_input, color = "Input"), 
+            size = 1, linetype = "dotted") +
+  scale_y_continuous(
+    name = "Birth Rate",
+    sec.axis = sec_axis(~ . / scale_factor_input, name = "Input")
+  ) +
+  labs(title = "Optimal Output Tracking: Birth Rate and Control Input",
+       x = "Date") +
+  scale_color_manual(name = "Legend", 
+                     values = c("Birth Rate" = "red", "Input" = "blue")) +
+  theme_minimal()
+
+print(p_opt)
 
