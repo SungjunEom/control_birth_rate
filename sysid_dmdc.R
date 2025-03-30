@@ -471,18 +471,18 @@ Q    <- 5      # weight on tracking error (stage cost)
 R    <- 0.01   # weight on control effort (stage cost)
 Q_f  <- 10     # terminal weight on tracking error
 
-# Define the desired target for the birth rate
-r_target <- 1
-
-# Set the simulation (control) horizon (e.g., 24 steps/months)
+# Set the simulation (control) horizon (e.g., 48 steps/months)
 T_horizon <- 48
 
 # System dimension (n = 4)
 n <- 4
 
 # x0 is the initial state at time 0 (for instance, the last column of X_whole)
-# (Assume X_whole is defined; here we use its last column as x0)
 x0 <- X_whole[, ncol(X_whole)]
+
+# Define a time-varying reference trajectory as an increasing function.
+# For example, we can let it increase linearly from 0.5 to 1.5.
+r_target_vec <- seq(0.5, 1.5, length.out = T_horizon + 1)
 
 # Define optimization variables:
 # x: state trajectory (n x (T_horizon+1))
@@ -494,7 +494,7 @@ u <- Variable(T_horizon)
 constraints <- list()
 # Initial condition:
 constraints <- c(constraints, x[, 1] == x0)
-# Dynamics and input constraints for t = 0,...,T_horizon-1:
+# Dynamics and input constraints for t = 1,...,T_horizon:
 for(t in 1:T_horizon) {
   constraints <- c(constraints,
                    x[, t + 1] == A_future %*% x[, t] + B_future * u[t],
@@ -502,27 +502,24 @@ for(t in 1:T_horizon) {
                    u[t] <= 100)
 }
 
-# Define the cost function
-# Note: x[,1] is x(0), x[,t+1] is x(t) for t=0,...,T_horizon.
+# Define the cost function using the time-varying reference.
+# Here the stage cost at time t compares the output C*x[, t] with r_target_vec[t]
 cost <- 0
-# Sum stage costs for t = 0,...,T_horizon-1:
 for(t in 1:T_horizon) {
-  # Tracking error: C*x[,t] - r_target; we use squared error multiplied by Q.
-  cost <- cost + Q * (C %*% x[, t] - r_target)^2 + R * (u[t])^2
+  cost <- cost + Q * (C %*% x[, t] - r_target_vec[t])^2 + R * (u[t])^2
 }
-# Terminal cost at t = T_horizon:
-cost <- cost + Q_f * (C %*% x[, T_horizon + 1] - r_target)^2
+# Terminal cost at t = T_horizon+1 uses the last element of the reference trajectory.
+cost <- cost + Q_f * (C %*% x[, T_horizon + 1] - r_target_vec[T_horizon + 1])^2
 
-# Formulate the optimization problem:
+# Formulate and solve the optimization problem:
 problem <- Problem(Minimize(cost), constraints)
-
-# Solve the problem
 result <- solve(problem)
 cat("Optimal cost:", result$value, "\n")
 
-# Extract the optimal trajectories
+# Extract the optimal trajectories:
 x_opt <- result$getValue(x)
 u_opt <- result$getValue(u)
+
 
 # Create a future time vector.
 # future_start_date: one month after the last observed date in global_time_index.
@@ -583,20 +580,20 @@ opt_data_norm <- opt_data %>%
 
 # Plot the normalized data on a single graph
 p_norm <- ggplot(opt_data_norm, aes(x = date)) +
-  geom_line(aes(y = birth_rate, color = "Birth Rate"), size = 1) +
-  geom_line(aes(y = state2, color = "State 2"), size = 1) +
-  geom_line(aes(y = state3, color = "State 3"), size = 1) +
-  geom_line(aes(y = state4, color = "State 4"), size = 1) +
-  geom_line(aes(y = input, color = "Input"), 
+  geom_line(aes(y = birth_rate, color = "월별 가상 조출생률"), size = 1) +
+  geom_line(aes(y = state2, color = "실업률"), size = 1) +
+  geom_line(aes(y = state3, color = "소비자물가지수"), size = 1) +
+  geom_line(aes(y = state4, color = "매매가격"), size = 1) +
+  geom_line(aes(y = input, color = "기준금리"), 
             size = 1, linetype = "dotted") +
   labs(title = "Normalized Optimal Tracking: State Variables and Control Input", 
        x = "Date", y = "Normalized Value (0-1)") +
   scale_color_manual(name = "Legend", 
-                     values = c("Birth Rate" = "red",
-                                "State 2" = "green",
-                                "State 3" = "blue",
-                                "State 4" = "purple",
-                                "Input" = "orange")) +
+                     values = c("월별 가상 조출생률" = "red",
+                                "실업률" = "green",
+                                "소비자물가지수" = "blue",
+                                "매매가격" = "purple",
+                                "기준금리" = "orange")) +
   theme_minimal()
 
 print(p_norm)
