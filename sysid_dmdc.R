@@ -236,41 +236,41 @@ expanded_simulated <- mean(sim_data$simulated, na.rm = TRUE) +
 
 # Create an interval label vector for each time index
 sim_data$sim_interval <- factor(c(
-  rep("2003.11-2008.06", 56), 
-  rep("2008.07-2013.06", 60), 
-  rep("2013.07-2018.01", 55), 
-  rep("2018.02-2023.09", 68), 
-  rep("2023.10-2024.06", 9)
+  rep("제16대", 56), 
+  rep("제17대", 60), 
+  rep("제18대", 55), 
+  rep("제19대", 68), 
+  rep("제20대", 9)
 ))
 
 # Build the plot:
 p_total <- ggplot(sim_data, aes(x = date)) +
   # Ground truth with fixed color (will appear in the legend)
-  geom_line(aes(y = expanded_ground_truth, color = "Ground Truth"), 
+  geom_line(aes(y = expanded_ground_truth, color = "조출생률 실제값"), 
             size = 1, linetype = "solid") +
   # Simulated series colored by interval
   geom_line(aes(y = expanded_simulated, color = sim_interval), 
             size = 1, linetype = "dashed") +
   # Input series with fixed color (appears in legend)
-  geom_line(aes(y = (input - offset_value) * input_scale_factor, color = "Input"), 
+  geom_line(aes(y = (input - offset_value) * input_scale_factor, color = "기준금리"), 
             size = 1, linetype = "dotted") +
   scale_y_continuous(
-    name = "Expanded Birth Rate",
-    sec.axis = sec_axis(~ . / input_scale_factor + offset_value, name = "Interest Rate")
+    name = "월별 가상 조출생률",
+    sec.axis = sec_axis(~ . / input_scale_factor + offset_value, name = "금리 (%)")
   ) +
   labs(
-    title = "Aggregated Switched System Simulation: Expanded Series, Shifted Input, and Intervals",
-    x = "Date"
+    # title = "Aggregated Switched System Simulation: Expanded Series, Shifted Input, and Intervals",
+    x = "날짜"
   ) +
   scale_color_manual(name = "Legend",
                      # Define colors for the fixed series and each interval:
-                     values = c("Ground Truth"      = "blue",
-                                "Input"             = "green",
-                                "2003.11-2008.06"   = "red",
-                                "2008.07-2013.06"   = "orange",
-                                "2013.07-2018.01"   = "purple",
-                                "2018.02-2023.09"   = "brown",
-                                "2023.10-2024.06"   = "pink")) +
+                     values = c("조출생률 실제값"      = "blue",
+                                "기준금리"             = "blue",
+                                "제16대"   = "red",
+                                "제17대"   = "orange",
+                                "제18대"   = "purple",
+                                "제19대"   = "brown",
+                                "제20대"   = "pink")) +
   theme_minimal()
 
 # Add vertical lines at switching points (except the last one)
@@ -467,7 +467,7 @@ library(CVXR)
 C <- matrix(c(1, 0, 0, 0), nrow = 1)
 
 # Define weight parameters (you can adjust these)
-Q    <- 1      # weight on tracking error (stage cost)
+Q    <- 5      # weight on tracking error (stage cost)
 R    <- 0.01   # weight on control effort (stage cost)
 Q_f  <- 10     # terminal weight on tracking error
 
@@ -529,6 +529,9 @@ u_opt <- result$getValue(u)
 future_start_date <- global_time_index[ncol(X_whole)] %m+% months(1)
 future_dates <- seq.Date(from = future_start_date, by = "month", length.out = T_horizon + 1)
 
+#########
+# Plot only birth-rate vs. inputs
+###########
 # Build a data frame for plotting the birth rate (first state variable) and the input.
 opt_data <- data.frame(
   date       = future_dates,
@@ -556,7 +559,47 @@ p_opt <- ggplot(opt_data, aes(x = date)) +
   theme_minimal()
 
 print(p_opt)
+###
+# plot all state variables
+###
+# Function to normalize a vector to [0, 1]
+normalize <- function(x) {
+  (x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE))
+}
 
+# Create a data frame for plotting
+opt_data <- data.frame(
+  date       = future_dates,
+  birth_rate = as.numeric(x_opt[1, ]),
+  state2     = as.numeric(x_opt[2, ]),
+  state3     = as.numeric(x_opt[3, ]),
+  state4     = as.numeric(x_opt[4, ]),
+  input      = c(NA, as.numeric(u_opt))
+)
+
+# Normalize all columns except the date
+opt_data_norm <- opt_data %>%
+  mutate(across(c(birth_rate, state2, state3, state4, input), normalize))
+
+# Plot the normalized data on a single graph
+p_norm <- ggplot(opt_data_norm, aes(x = date)) +
+  geom_line(aes(y = birth_rate, color = "Birth Rate"), size = 1) +
+  geom_line(aes(y = state2, color = "State 2"), size = 1) +
+  geom_line(aes(y = state3, color = "State 3"), size = 1) +
+  geom_line(aes(y = state4, color = "State 4"), size = 1) +
+  geom_line(aes(y = input, color = "Input"), 
+            size = 1, linetype = "dotted") +
+  labs(title = "Normalized Optimal Tracking: State Variables and Control Input", 
+       x = "Date", y = "Normalized Value (0-1)") +
+  scale_color_manual(name = "Legend", 
+                     values = c("Birth Rate" = "red",
+                                "State 2" = "green",
+                                "State 3" = "blue",
+                                "State 4" = "purple",
+                                "Input" = "orange")) +
+  theme_minimal()
+
+print(p_norm)
 
 
 ###############################################
@@ -592,11 +635,162 @@ pca_data$Period <- c("제16대", "제17대",
 
 # K-means clustering
 kmeans_result <- kmeans(flattened, centers = 2)
-pca_data$Cluster <- as.factor(kmeans_result$cluster)
+pca_data$집단 <- as.factor(kmeans_result$cluster)
 
 # Plot
-ggplot(pca_data, aes(x = PC1, y = PC2, color = Cluster, label = Period)) +
+ggplot(pca_data, aes(x = PC1, y = PC2, color = 집단, label = Period)) +
   geom_point(size = 4) +
   geom_text(nudge_x = 0.5, nudge_y = 0.2, size = 4) +
   theme_minimal() +
-  labs(title = "PCA of A Matrices with KMeans Clustering", x = "PC1", y = "PC2")
+  labs(title = "주성분 분석(PCA)을 이용한 상태 전이 행렬 A의 K-평균 군집화", x = "PC1", y = "PC2")
+
+
+
+###############################################
+#
+# (Additional Code) Combine Ground Truth Historical Data 
+# with Future State-Feedback Closed-Loop Simulation
+#
+###############################################
+
+library(lubridate)
+library(ggplot2)
+
+# --- Part 1: Prepare Historical Ground Truth Data ---
+
+# Ground truth birth rate (assumed to be the first state variable in X_whole)
+historical_ground_truth <- X_whole[1, ]
+# Historical dates covering the full observed period (e.g., 2003-11 to 2024-06)
+historical_dates <- global_time_index  
+# Historical control input: actual interest rate over the historical period
+historical_input <- interest_rate$기준금리[1:length(historical_ground_truth)]
+
+# --- Part 2: Prepare Future State-Feedback Simulation Data ---
+
+# For the state-feedback simulation, we have already computed:
+#   x_closed: state trajectory (4 x (T_future+1)) with x_closed[,1] == last historical state
+#   u_record: vector of T_future saturated control inputs
+#
+# To avoid duplication, remove the first column (which is equal to the last historical state)
+future_birth_rate <- as.numeric(x_closed[1, -1])  # future birth rate simulation for state-feedback
+future_input      <- as.numeric(u_record)         # future control inputs from state-feedback simulation
+
+# Future dates: start one month after the last historical date
+future_dates <- seq.Date(from = historical_dates[length(historical_dates)] %m+% months(1),
+                         by = "month", length.out = length(future_birth_rate))
+
+# --- Part 3: Combine Historical and Future Data ---
+
+# Combined birth rate: historical ground truth followed by future state-feedback simulation
+combined_birth_rate <- c(historical_ground_truth, future_birth_rate)
+# Combined control input: historical interest rate followed by state-feedback control inputs
+combined_input      <- c(historical_input, future_input)
+# Combined date vector
+combined_dates      <- c(historical_dates, future_dates)
+# Label the phases for plotting clarity
+phase_label         <- c(rep("Historical Ground Truth", length(historical_ground_truth)),
+                         rep("State-Feedback Simulation", length(future_birth_rate)))
+
+# Build the combined data frame
+combined_df <- data.frame(
+  date       = combined_dates,
+  birth_rate = combined_birth_rate,
+  input      = combined_input,
+  phase      = phase_label
+)
+
+# --- Part 4: Plot the Combined Data ---
+
+# Compute a scaling factor so that the control input (interest rate) can be overlaid
+scale_factor_input <- max(combined_birth_rate, na.rm = TRUE) / max(combined_input, na.rm = TRUE)
+
+p_combined_state_feedback <- ggplot(combined_df, aes(x = date)) +
+  # Plot the birth rate trajectory, colored by phase
+  geom_line(aes(y = birth_rate, color = phase), size = 1) +
+  # Overlay the control input (scaled) with a fixed color and dotted line style
+  geom_line(aes(y = input * scale_factor_input), color = "darkgreen", linetype = "dotted", size = 1) +
+  scale_y_continuous(
+    name = "Birth Rate",
+    sec.axis = sec_axis(~ . / scale_factor_input, name = "Interest Rate (%)")
+  ) +
+  labs(title = "Combined Simulation: Historical Ground Truth & Future State-Feedback Closed-Loop Simulation",
+       x = "Date", color = "Phase") +
+  theme_minimal()
+
+print(p_combined_state_feedback)
+
+
+
+###############################################
+#
+# (Additional Code) Combine Ground Truth Historical Data 
+# with Future Optimal Control Simulation
+#
+###############################################
+
+library(lubridate)
+library(ggplot2)
+
+# --- Part 1: Prepare the Historical Ground Truth Data ---
+
+# Ground truth birth rate from the original data (first row of X_whole)
+historical_ground_truth <- X_whole[1, ]
+# Historical dates (assumed to cover the entire period, e.g., 2003-11 to 2024-06)
+historical_dates <- global_time_index  # length should match the number of columns in X_whole
+
+# Historical control input (actual interest rate over the historical period)
+historical_input <- interest_rate$기준금리[1:length(historical_ground_truth)]
+
+# --- Part 2: Prepare the Future Optimal Control Simulation Data ---
+
+# Optimal control simulation using CVXR produced x_opt and u_opt.
+# Note: x_opt includes the initial state (same as last historical value),
+# so for the future portion, we remove the duplicate initial state.
+future_birth_rate <- as.numeric(x_opt[1, -1])  # optimal birth rate simulation for future time steps
+future_input      <- as.numeric(u_opt)         # optimal control inputs over the horizon
+
+# Future dates: start one month after the last historical date
+future_dates <- seq.Date(from = historical_dates[length(historical_dates)] %m+% months(1),
+                         by = "month", length.out = length(future_birth_rate))
+
+# --- Part 3: Combine Historical and Future Data ---
+
+# Combined birth rate: ground truth for historical, then future optimal control simulation
+combined_birth_rate <- c(historical_ground_truth, future_birth_rate)
+# Combined input: historical interest rate for the historical period and optimal control input for future
+combined_input <- c(historical_input, future_input)
+# Combined date vector:
+combined_dates <- c(historical_dates, future_dates)
+
+# Create a phase label to distinguish historical from future simulation
+phase <- c(rep("Historical Ground Truth", length(historical_ground_truth)),
+           rep("Optimal Control Simulation", length(future_birth_rate)))
+
+# Build a combined data frame for plotting.
+combined_df <- data.frame(
+  date = combined_dates,
+  birth_rate = combined_birth_rate,
+  input = combined_input,
+  phase = phase
+)
+
+# --- Part 4: Plot the Combined Data ---
+
+# Compute a scaling factor to overlay the interest rate on the same plot.
+scale_factor_input <- max(combined_birth_rate, na.rm = TRUE) / max(combined_input, na.rm = TRUE)
+
+p_combined_gt <- ggplot(combined_df, aes(x = date)) +
+  # Plot the birth rate trajectory, colored by phase.
+  geom_line(aes(y = birth_rate, color = phase), size = 1) +
+  # Overlay the control input (scaled) with a fixed color.
+  geom_line(aes(y = input * scale_factor_input), color = "darkgreen", linetype = "dotted", size = 1) +
+  scale_y_continuous(
+    name = "Birth Rate",
+    sec.axis = sec_axis(~ . / scale_factor_input, name = "Interest Rate (%)")
+  ) +
+  labs(title = "Combined Simulation: Historical Ground Truth & Future Optimal Control Simulation",
+       x = "Date", color = "Phase") +
+  theme_minimal()
+
+print(p_combined_gt)
+
