@@ -475,7 +475,7 @@ Q_f  <- 10     # terminal weight on tracking error
 r_target <- 1
 
 # Set the simulation (control) horizon (e.g., 24 steps/months)
-T_horizon <- 24
+T_horizon <- 48
 
 # System dimension (n = 4)
 n <- 4
@@ -557,3 +557,46 @@ p_opt <- ggplot(opt_data, aes(x = date)) +
 
 print(p_opt)
 
+
+
+###############################################
+#
+# Custering A matrices
+#
+###############################################
+
+# Load necessary libraries
+library(stats)
+
+# Define the matrices
+A1 <- results$`2003.11-2008.06`$A
+
+A2 <- results$`2008.07-2013.06`$A
+
+A3 <- results$`2013.07-2018.01`$A
+
+A4 <- results$`2018.02-2023.09`$A
+
+A5 <- results$`2023.10-2024.06`$A
+
+# Combine and flatten
+matrices <- list(A1, A2, A3, A4, A5)
+flattened <- do.call(rbind, lapply(matrices, as.vector))
+
+# PCA
+pca_result <- prcomp(flattened, scale. = TRUE)
+pca_data <- data.frame(pca_result$x[, 1:2])
+pca_data$Period <- c("제16대", "제17대", 
+                     "제18대", "제19대", 
+                     "제20대")
+
+# K-means clustering
+kmeans_result <- kmeans(flattened, centers = 2)
+pca_data$Cluster <- as.factor(kmeans_result$cluster)
+
+# Plot
+ggplot(pca_data, aes(x = PC1, y = PC2, color = Cluster, label = Period)) +
+  geom_point(size = 4) +
+  geom_text(nudge_x = 0.5, nudge_y = 0.2, size = 4) +
+  theme_minimal() +
+  labs(title = "PCA of A Matrices with KMeans Clustering", x = "PC1", y = "PC2")
