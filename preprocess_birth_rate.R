@@ -34,7 +34,7 @@ ggplot(monthly_data, aes(x = date, y = monthly_rate)) +
 # -------------------------------
 
 # Define the Gaussian kernel parameters
-sigma <- 3
+sigma <- 3        # original=3
 kernel_half <- 6  # Half-length of kernel (you can adjust this value)
 x <- -kernel_half:kernel_half
 gaussian_kernel <- dnorm(x, mean = 0, sd = sigma)
@@ -46,7 +46,7 @@ gaussian_kernel <- gaussian_kernel / sum(gaussian_kernel)
 monthly_data$gaussian_smoothed <- stats::filter(monthly_data$monthly_rate,
                                                 filter = gaussian_kernel,
                                                 sides = 2)
-monthly_data$gaussian_smoothed <- monthly_data$monthly_rate
+# monthly_data$gaussian_smoothed <- monthly_data$monthly_rate
 
 # Save the monthly_data data frame to a CSV file without row names
 write.csv(monthly_data, file = "조출생률_smoothed_monthly_data.csv", row.names = FALSE)
