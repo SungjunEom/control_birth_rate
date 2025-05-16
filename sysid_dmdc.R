@@ -93,6 +93,34 @@ house <- house[1:248,]
 
 ######################
 #
+# Causality Test
+#
+######################
+# Load required package
+library(lmtest)
+
+# Extract the relevant numeric vectors
+# Assuming the birth rate column is named '조출생률'
+birth_rate_ts <- as.numeric(birth_rate$gaussian_smoothed)
+interest_rate_ts <- as.numeric(interest_rate$기준금리)
+
+# Ensure they're the same length and no NAs
+length(birth_rate_ts)  # Should be 248
+length(interest_rate_ts)  # Should be 248
+
+# Optionally, check for NAs
+sum(is.na(birth_rate_ts))  # Should be 0
+sum(is.na(interest_rate_ts))  # Should be 0
+
+# Run Granger causality tests
+# Test if 기준금리 Granger-causes 조출생률
+grangertest(birth_rate_ts ~ interest_rate_ts, order = 2)
+
+# Test if 조출생률 Granger-causes 기준금리
+grangertest(interest_rate_ts ~ birth_rate_ts, order = 2)
+
+######################
+#
 # Construct Data Matrices
 #
 ######################
@@ -262,7 +290,7 @@ p_total <- ggplot(sim_data, aes(x = date)) +
     # title = "Aggregated Switched System Simulation: Expanded Series, Shifted Input, and Intervals",
     x = "날짜"
   ) +
-  scale_color_manual(name = "Legend",
+  scale_color_manual(name = "",
                      # Define colors for the fixed series and each interval:
                      values = c("조출생률 실제값"      = "blue",
                                 "기준금리"             = "blue",
@@ -482,7 +510,7 @@ x0 <- X_whole[, ncol(X_whole)]
 
 # Define a time-varying reference trajectory as an increasing function.
 # For example, we can let it increase linearly from 0.5 to 1.5.
-r_target_vec <- seq(0.5, 1.5, length.out = T_horizon + 1)
+r_target_vec <- seq(0.5, 0.75, length.out = T_horizon + 1)
 
 # Define optimization variables:
 # x: state trajectory (n x (T_horizon+1))
@@ -592,7 +620,7 @@ p_norm <- ggplot(opt_data_norm, aes(x = date)) +
                      values = c("월별 가상 조출생률" = "red",
                                 "실업률" = "green",
                                 "소비자물가지수" = "blue",
-                                "매매가격" = "purple",
+                                "주택매매가격" = "purple",
                                 "기준금리" = "orange")) +
   theme_minimal()
 
