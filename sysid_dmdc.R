@@ -819,3 +819,91 @@ p_combined_gt <- ggplot(combined_df, aes(x = date)) +
 
 print(p_combined_gt)
 
+######################
+#
+# VAR-based Granger-causality test
+#
+######################
+
+# -- packages --------------------------------------------------------------
+if (!require(vars))    install.packages("vars")
+if (!require(tseries)) install.packages("tseries")
+library(vars); library(tseries)
+
+############################################################################
+# Utility: VAR-based Granger test for an arbitrary sub-sample
+############################################################################
+run_granger_window <- function(start_date,
+                               end_date,
+                               lag_max   = 12,
+                               alpha     = 0.05,
+                               verbose   = TRUE) {
+  # ---- 1. locate rows ----------------------------------------------------
+  idx <- which(global_time_index >= as.Date(start_date) &
+                 global_time_index <= as.Date(end_date))
+  if (length(idx) < 20L)
+    stop("Window too short for VAR estimation (< 20 obs).")
+  
+  # ---- 2. build 2-var matrix --------------------------------------------
+  var_data <- cbind(BirthRate    = birth_rate_ts[idx],
+                    InterestRate = interest_rate_ts[idx])
+  
+  # ---- 3. stationarity check & differencing -----------------------------
+  need_diff <- FALSE
+  if (adf.test(var_data[, "BirthRate"])$p.value    > alpha ||
+      adf.test(var_data[, "InterestRate"])$p.value > alpha)
+    need_diff <- TRUE
+  
+  if (need_diff) {
+    var_data <- diff(var_data)
+    colnames(var_data) <- c("dBirthRate", "dInterestRate")
+    idx_lbl <- idx[-1]             # drop first index lost by diff()
+  } else {
+    idx_lbl <- idx
+  }
+  
+  # ---- 4. VAR lag selection ---------------------------------------------
+  p_opt <- VARselect(var_data, lag.max = lag_max, type = "const")$selection["AIC(n)"]
+  
+  # ---- 5. fit VAR & Wald tests ------------------------------------------
+  vmodel <- VAR(var_data, p = p_opt, type = "const")
+  gc1 <- causality(vmodel, cause = colnames(var_data)[2])  # Interest → Birth
+  gc2 <- causality(vmodel, cause = colnames(var_data)[1])  # Birth → Interest
+  
+  if (verbose) {
+    cat("\n===== Window:",
+        format(global_time_index[min(idx_lbl)]), "to",
+        format(global_time_index[max(idx_lbl)]),
+        " (", length(idx_lbl), " obs ) =====\n")
+    cat("ADF differencing applied:", need_diff, "\n")
+    cat("Selected lag (AIC):", p_opt, "\n\n")
+    
+    cat(">>> InterestRate  ⇒  BirthRate\n")
+    print(gc1$Granger)
+    
+    cat("\n>>> BirthRate     ⇒  InterestRate\n")
+    print(gc2$Granger)
+  }
+  
+  invisible(list(window      = c(start_date, end_date),
+                 n_obs       = length(idx_lbl),
+                 diff_used   = need_diff,
+                 lag_used    = p_opt,
+                 IR_to_BR    = gc1$Granger,
+                 BR_to_IR    = gc2$Granger))
+}
+
+############################################################################
+# Example: replicate the five political-cycle intervals in your paper
+############################################################################
+intervals_date <- list(
+  c("2003-11-01", "2008-06-01"),
+  c("2008-07-01", "2013-06-01"),
+  c("2013-07-01", "2018-01-01"),
+  c("2018-02-01", "2023-09-01"),
+  c("2023-10-01", "2024-06-01")
+)
+
+gc_results <- lapply(intervals_date, \(d)
+                     run_granger_window(d[1], d[2]))
+
