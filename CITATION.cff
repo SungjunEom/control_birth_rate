@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+message: "If you use this repository, please cite the software and/or the associated article as below."
+
+type: software
+authors:
+- family-names: "Eom"
+  given-names: "Sungjun"
+  orcid: "https://orcid.org/0009-0001-8013-2454"
+title: "한국은행 기준금리–조출생률 다이내믹스의 하이브리드 시스템 식별을 통한 출생률 제어 -DMDc 기반 PWA 시스템 식별-"
+# version: 2.0.4
+# doi: 10.5281/zenodo.1234
+date-released: 2025-06-20
+url: "https://github.com/SungjunEom/control_birth_rate"
+license: "MIT"
+
+related_resources:
+  type: article
+  title: "Modified Akaike Information Criterion for Quantifying Regularization in Nonlinear Regression"
+  authors:
+    - family-names: "Eom"
+      given-names: "Sungjun"
+      orcid: "https://orcid.org/0009-0001-8013-2454"
+  # journal: "Journal of Example Research"
+  # volume: "12"
+  # issue: "3"
+  # pages: "45-67"
+  year: 2025
+  # doi: "10.1234/example.doi"
+  # url: "https://github.com/SungjunEom/control_birth_rate"
